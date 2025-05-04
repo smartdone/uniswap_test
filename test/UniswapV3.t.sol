@@ -55,4 +55,16 @@ contract UniswapV3Test is Test {
         // 池子是否被锁定
         console.log("unlocked", unlocked);
     }
+
+    // forge test --fork-url http://127.0.0.1:8579 --match-test testPoolInfo -vvvv
+    function testPoolInfo() public view {
+        address token0 = testPool.token0();
+        address token1 = testPool.token1();
+        console.log("token0", token0);
+        console.log("token1", token1);
+    }
+
+    function testPoolSwap() public {
+        
+    }
 }
