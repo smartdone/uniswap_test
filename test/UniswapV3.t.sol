@@ -4,15 +4,27 @@ pragma solidity ^0.8.13;
 import {Test, console} from "forge-std/Test.sol";
 import {IUniswapV3Factory} from "v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import {IUniswapV3Pool} from "v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import {TransferHelper} from "v3-core/contracts/libraries/TransferHelper.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+interface IWETH is IERC20 {
+    function deposit() external payable;
+    function withdraw(uint256) external;
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transfer(address to, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+}
 
 contract UniswapV3Test is Test {
     // 以core chain为例
     IUniswapV3Factory factoryV3;
     IUniswapV3Pool testPool;
+    IWETH WETH;
 
     function setUp() public {
         factoryV3 = IUniswapV3Factory(0x526190295AFB6b8736B14E4b42744FBd95203A3a);
         testPool = IUniswapV3Pool(0x59c458bbFa9e4ab5D970523de76D4EC77c44A5D1);
+        WETH = IWETH(0x40375C92d9FAf44d2f9db9Bd9ba41a3317a2404f);
     }
 
     // forge test --fork-url http://127.0.0.1:8579 --match-test testFactoryAllFees -vvvv
@@ -64,7 +76,44 @@ contract UniswapV3Test is Test {
         console.log("token1", token1);
     }
 
-    function testPoolSwap() public {
-        
+    // forge test --fork-url http://127.0.0.1:8579 --match-test testPoolSwap -vvvv
+    function testPoolSwap() external {
+        uint bal = address(this).balance;
+        console.log("balance", bal);
+        WETH.deposit{value: 1000 ether}();
+        uint eth = WETH.balanceOf(address(this));
+        console.log("WETH balance", eth);
+        (uint160 sqrtPriceLimitX96, , , , , , ) = testPool.slot0();
+        sqrtPriceLimitX96 = uint160(1.55 * 10**18); // 设置价格下限
+
+        (int256 amount0, int256 amount1) = testPool.swap(
+            address(this),
+            true, // 方向：token0 -> token1
+            int256(1000 ether), // 交换的数量
+            sqrtPriceLimitX96, // 价格下限
+            abi.encode(testPool.token0(), testPool.token1())
+        );
+        console.log("amount0", amount0);
+        console.log("amount1", amount1);
+        eth = WETH.balanceOf(address(this));
+        uint token = IERC20(testPool.token1()).balanceOf(address(this));
+        console.log("WETH balance", eth);
+        console.log("token balance", token);
     }
+
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) external {
+        (address token0, address token1) = abi.decode(data, (address, address));
+        if (amount0Delta > 0) {
+            TransferHelper.safeTransfer(token0, msg.sender, uint256(amount0Delta));
+        } else if (amount1Delta > 0) {
+            TransferHelper.safeTransfer(token1, msg.sender, uint256(amount1Delta));
+        }
+    }
+
+    receive() external payable {}
+    fallback() external payable {}
 }
