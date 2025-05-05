@@ -76,6 +76,12 @@ contract UniswapV3Test is Test {
         console.log("token1", token1);
     }
 
+    function calculatePriceLimit(uint160 currentSqrtPriceX96) public pure returns (uint160) {
+        // sqrt(0.99) ≈ 0.994987437
+        uint160 sqrtPriceLimitX96 = uint160((uint256(currentSqrtPriceX96) * 994987437) / 1e9);
+        return sqrtPriceLimitX96;
+    }
+
     // forge test --fork-url http://127.0.0.1:8579 --match-test testPoolSwap -vvvv
     function testPoolSwap() external {
         uint bal = address(this).balance;
@@ -83,14 +89,28 @@ contract UniswapV3Test is Test {
         WETH.deposit{value: 1000 ether}();
         uint eth = WETH.balanceOf(address(this));
         console.log("WETH balance", eth);
-        (uint160 sqrtPriceLimitX96, , , , , , ) = testPool.slot0();
-        sqrtPriceLimitX96 = uint160(1.55 * 10**18); // 设置价格下限
+        (uint160 sqrtPriceX96, , , , , , ) = testPool.slot0();
+        console.log("sqrtPriceX96", sqrtPriceX96);
+        sqrtPriceX96 = calculatePriceLimit(sqrtPriceX96);
+        console.log("sqrtPriceX96 limit", sqrtPriceX96);
+
+        // 价格计算
+        // P = (sqrtPriceX96 / 2^96)^2
+        // P_limit = P * 0.99
+        // sqrtPriceLimitX96 = sqrt(P_limit) * 2^96
+        // sqrtPriceX96 = sqrt(P) * 2^96
+
+        // 简化计算
+        // sqrtPriceLimitX96 = sqrtPriceX96 * sqrt(0.99)
+        // sqrt(0.99) ≈ 0.994987437
+        // sqrtPriceLimitX96 = sqrtPriceX96 * 0.994987437
+        // sqrtPriceLimitX96 = uint160((uint256(sqrtPriceX96) * 994987437) / 1e9);
 
         (int256 amount0, int256 amount1) = testPool.swap(
             address(this),
             true, // 方向：token0 -> token1
             int256(1000 ether), // 交换的数量
-            sqrtPriceLimitX96, // 价格下限
+            sqrtPriceX96, // 价格下限
             abi.encode(testPool.token0(), testPool.token1())
         );
         console.log("amount0", amount0);
