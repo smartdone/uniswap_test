@@ -126,12 +126,48 @@ contract UniswapV3Test is Test {
         int256 amount1Delta,
         bytes calldata data
     ) external {
+        // TODO 需要验证pool地址, 这里直接简化了，直接这么写会被攻击
         (address token0, address token1) = abi.decode(data, (address, address));
         if (amount0Delta > 0) {
             TransferHelper.safeTransfer(token0, msg.sender, uint256(amount0Delta));
         } else if (amount1Delta > 0) {
             TransferHelper.safeTransfer(token1, msg.sender, uint256(amount1Delta));
         }
+    }
+
+    // forge test --fork-url http://127.0.0.1:8579 --match-test testPoolFlash -vvvv
+    function testPoolFlash() public {
+        WETH.deposit{value: 1000 ether}();
+        testPool.flash(
+            address(this), // 收款地址
+            100 ether, // 借款数量
+            0, // 借款数量
+            abi.encode(testPool.token0(), testPool.token1(), address(testPool), 100 ether, 0) // 额外数据
+        );
+    }
+
+    function uniswapV3FlashCallback(
+        uint256 fee0,
+        uint256 fee1,
+        bytes calldata data
+    ) external {
+        
+
+        // TODO 需要验证pool地址, 这里直接简化了，直接这么写会被攻击
+        (address token0, address token1, address pool, uint256 amount0, uint256 amount1) = abi.decode(data, (address, address, address, uint256, uint256));
+        uint bal = IERC20(token0).balanceOf(address(this));
+        console.log("token0 balance", bal);
+        // 归还借款
+        if (fee0 > 0) {
+            uint256 amount0Owed = amount0 + fee0 ; // Add borrowed amount if needed
+            TransferHelper.safeTransfer(token0, pool, amount0Owed);
+        }
+        if (fee1 > 0) {
+            uint256 amount1Owed = amount1 + fee1; // Add borrowed amount if needed
+            TransferHelper.safeTransfer(token1, pool, amount1Owed);
+        }
+        bal = IERC20(token0).balanceOf(address(this));
+        console.log("token0 balance", bal);
     }
 
     receive() external payable {}
